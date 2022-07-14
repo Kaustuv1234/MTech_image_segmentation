@@ -61,8 +61,8 @@ class EvalCOCO(data.Dataset):
         Labels are in unit8 format where class labels are in [0 - 181] and 255 is unlabeled.
         """
         N = len(self.imdb)
-        image_path = os.path.join(self.root, 'images', '{}2017'.format(self.split), '{}.jpg'.format(image_id))
-        label_path = os.path.join(self.root, 'annotations', '{}2017'.format(self.split), '{}.png'.format(image_id))
+        image_path = os.path.join(self.root, 'images', '{}2017'.format(self.split), '{}.tif'.format(image_id))
+        label_path = os.path.join(self.root, 'annotations', '{}2017'.format(self.split), '{}.tif'.format(image_id))
 
         image = Image.open(image_path).convert('RGB')
         label = Image.open(label_path)
