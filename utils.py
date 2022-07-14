@@ -99,7 +99,7 @@ def _fast_hist(label_true, label_pred, n_class):
 def scores(label_trues, label_preds, n_class):
     hist = np.zeros((n_class, n_class))
     print('11111111111111111111')
-    print('label_true.shape', label_true.shape, 'label_pred.shape', label_pred.shape)
+    print('label_trues.shape', label_trues.shape, 'label_preds.shape', label_preds.shape)
     print('11111111111111111111')
     for lt, lp in zip(label_trues, label_preds):
         hist += _fast_hist(lt.flatten(), lp.flatten(), n_class)
