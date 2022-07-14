@@ -208,6 +208,11 @@ def evaluate(args, logger, dataloader, classifier, model):
             probs = F.interpolate(probs, label.shape[-2:], mode='bilinear', align_corners=False)
             preds = probs.topk(1, dim=1)[1].view(B, -1).cpu().numpy()
             label = label.view(B, -1).cpu().numpy()
+            print('22222222222222222')
+            print('probs', probs.shape)
+            print('preds', preds.shape)
+            print('label', label.shape)
+            print('22222222222222222')
 
             histogram += scores(label, preds, args.K_test)
             
