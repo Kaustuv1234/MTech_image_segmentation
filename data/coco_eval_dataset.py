@@ -37,13 +37,14 @@ class EvalCOCO(data.Dataset):
         self.label = label
         self.view  = -1
 
-        self.fine_to_coarse = self._get_fine_to_coarse()
+        # this is a vectorize object that takes an input array and returns fine_to_coarse_dict[x] for each element
+        self.fine_to_coarse = self._get_fine_to_coarse() 
 
         # For test-time augmentation / robustness test. 
         self.transform_list = transform_list
         
     def load_imdb(self):
-        # 1. Setup filelist
+        # returns list of image names without extension
         imdb = os.path.join(self.root, 'curated', '{}2017'.format(self.split), 'Coco164kFull_Stuff_Coarse_7.txt')
         imdb = tuple(open(imdb, "r"))
         imdb = [id_.rstrip() for id_ in imdb]
@@ -91,6 +92,7 @@ class EvalCOCO(data.Dataset):
         if not self.label:
             return (image, None)
 
+        # change all fine classifications to coarse classifications
         label = self._label_transform(label)
 
         return image, label
@@ -99,18 +101,30 @@ class EvalCOCO(data.Dataset):
     def _get_fine_to_coarse(self):
         """
         Map fine label indexing to coarse label indexing. 
+        Coarse means broad classes like vehicles, animals, traffic signs, etc
+        Fine means classes that belong to coarse like cat, dog, car, bus, plane, etc
+
+        the dictionary has 2 keys - fine_name_to_coarse_name and fine_index_to_coarse_index
+
+        refer to following link for creating "fine_to_coarse_dict.pickle"- https://github.com/xu-ji/IIC/tree/master/code/datasets/segmentation/util
         """
         with open(os.path.join(self.root, FINE_TO_COARSE_PATH), "rb") as dict_f:
             d = pickle.load(dict_f)
-        fine_to_coarse_dict      = d["fine_index_to_coarse_index"]
-        fine_to_coarse_dict[255] = -1
-        fine_to_coarse_map       = np.vectorize(lambda x: fine_to_coarse_dict[x]) # not in-place.
+        fine_to_coarse_dict      = d["fine_index_to_coarse_index"]  # get index mapping
+        fine_to_coarse_dict[255] = -1 # does -1 mean no classification ??
+
+        # below is a numpy vectorize object, it takes multiple inputs and applies the function to all the elements
+        fine_to_coarse_map       = np.vectorize(lambda x: fine_to_coarse_dict[x]) # function that takes x and returns fine_to_coarse_dict[x]
 
         return fine_to_coarse_map
 
 
     def _label_transform(self, label):
         """
+        takes a multidimensional array, then maps each class index to its superclass index. 
+        If stuff is true, then make all superclass index for things negative
+        If things is true, then make all superclass index for stuff negative
+
         In COCO-Stuff, there are 91 Things and 91 Stuff. 
             91 Things (0-90)  => 12 superclasses (0-11)
             91 Stuff (91-181) => 15 superclasses (12-26)
@@ -118,7 +132,7 @@ class EvalCOCO(data.Dataset):
         For [Stuff-15], which is the benchmark IIC uses, we only use 15 stuff superclasses.
         """
         label = np.array(label)
-        label = self.fine_to_coarse(label)    # Map to superclass indexing.
+        label = self.fine_to_coarse(label)    # Map fine class index to superclass index
         mask  = label >= 255 # Exclude unlabelled.
         
         # Start from zero. 
@@ -128,7 +142,7 @@ class EvalCOCO(data.Dataset):
             mask = label > 11 # This makes all Stuff categories negative (ignored.)
             label[mask] = -1
             
-        # Tensor-fy
+        # convert to tensor of long type
         label = torch.LongTensor(label)                            
 
         return label
@@ -137,13 +151,13 @@ class EvalCOCO(data.Dataset):
     def _image_transform(self, image, mode):
         if self.mode == 'test':
             transform = self._get_data_transformation()
-
             return transform(image)
         else:
             raise NotImplementedError()
 
 
     def _get_data_transformation(self):
+        
         trans_list = []
         if 'jitter' in self.transform_list:
             trans_list.append(transforms.RandomApply([transforms.ColorJitter(0.3, 0.3, 0.3, 0.1)], p=0.8))
