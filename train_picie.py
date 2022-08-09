@@ -106,9 +106,9 @@ def train(args, logger, dataloader, model, classifier1, classifier2, criterion1,
 
         B, C, _ = featmap1.size()[:3]
         if i == 0:
-            logger.info('Batch input size   : {}'.format(list(input1.shape)))
-            logger.info('Batch label size   : {}'.format(list(label1.shape)))
-            logger.info('Batch feature size : {}\n'.format(list(featmap1.shape)))
+            print('Batch input size   : {}'.format(list(input1.shape)))
+            print('Batch label size   : {}'.format(list(label1.shape)))
+            print('Batch feature size : {}\n'.format(list(featmap1.shape)))
         
         if args.metric_train == 'cosine':
             featmap1 = F.normalize(featmap1, dim=1, p=2)
@@ -158,7 +158,7 @@ def train(args, logger, dataloader, model, classifier1, classifier2, criterion1,
         optimizer.step()
 
         if (i % 200) == 0:
-            logger.info('{0} / {1}\t'.format(i, len(dataloader)))
+            print('{0} / {1}\t'.format(i, len(dataloader)))
 
     return losses.avg, losses_cet.avg, losses_cet_within.avg, losses_cet_across.avg, losses_mse.avg
 
@@ -171,7 +171,7 @@ def adjust_learning_rate(optimizer, epoch, args):
 
 
 def main(args, logger):
-    logger.info(args)
+    print(args)
 
     # Use random seed.
     fix_seed_for_reproducability(args.seed)
@@ -215,18 +215,18 @@ def main(args, logger):
             # Adjust lr if needed. 
             # adjust_learning_rate(optimizer, epoch, args)
 
-            logger.info('\n============================= [Epoch {}] =============================\n'.format(epoch))
-            logger.info('Start computing centroids.')
+            print('\n============================= [Epoch {}] =============================\n'.format(epoch))
+            print('Start computing centroids.')
             t1 = t.time()
             centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=1)
             centroids2, kmloss2 = run_mini_batch_kmeans(args, logger, trainloader, model, view=2)
-            logger.info('-Centroids ready. [Loss: {:.5f}| {:.5f}/ Time: {}]\n'.format(kmloss1, kmloss2, get_datetime(int(t.time())-int(t1))))
+            print('-Centroids ready. [Loss: {:.5f}| {:.5f}/ Time: {}]\n'.format(kmloss1, kmloss2, get_datetime(int(t.time())-int(t1))))
             
             # Compute cluster assignment. 
             t2 = t.time()
             weight1 = compute_labels(args, logger, trainloader, model, centroids1, view=1)
             weight2 = compute_labels(args, logger, trainloader, model, centroids2, view=2)
-            logger.info('-Cluster labels ready. [{}]\n'.format(get_datetime(int(t.time())-int(t2)))) 
+            print('-Cluster labels ready. [{}]\n'.format(get_datetime(int(t.time())-int(t2)))) 
             
             # Criterion.
             if not args.no_balance:
@@ -258,20 +258,20 @@ def main(args, logger):
                                                             collate_fn=collate_train,
                                                             worker_init_fn=worker_init_fn(args.seed))
 
-            logger.info('Start training ...')
+            print('Start training ...')
             train_loss, train_cet, cet_within, cet_across, train_mse = train(args, logger, trainloader_loop, model, classifier1, classifier2, criterion1, criterion2, optimizer, epoch) 
             acc1, res1 = evaluate(args, logger, testloader, classifier1, model)
             acc2, res2 = evaluate(args, logger, testloader, classifier2, model)
             
-            logger.info('============== Epoch [{}] =============='.format(epoch))
-            logger.info('  Time: [{}]'.format(get_datetime(int(t.time())-int(t1))))
-            logger.info('  K-Means loss   : {:.5f} | {:.5f}'.format(kmloss1, kmloss2))
-            logger.info('  Training Total Loss  : {:.5f}'.format(train_loss))
-            logger.info('  Training CE Loss (Total | Within | Across) : {:.5f} | {:.5f} | {:.5f}'.format(train_cet, cet_within, cet_across))
-            logger.info('  Training MSE Loss (Total) : {:.5f}'.format(train_mse))
-            logger.info('  [View 1] ACC: {:.4f} | mIoU: {:.4f}'.format(acc1, res1['mean_iou']))
-            logger.info('  [View 2] ACC: {:.4f} | mIoU: {:.4f}'.format(acc2, res2['mean_iou']))
-            logger.info('========================================\n')
+            print('============== Epoch [{}] =============='.format(epoch))
+            print('  Time: [{}]'.format(get_datetime(int(t.time())-int(t1))))
+            print('  K-Means loss   : {:.5f} | {:.5f}'.format(kmloss1, kmloss2))
+            print('  Training Total Loss  : {:.5f}'.format(train_loss))
+            print('  Training CE Loss (Total | Within | Across) : {:.5f} | {:.5f} | {:.5f}'.format(train_cet, cet_within, cet_across))
+            print('  Training MSE Loss (Total) : {:.5f}'.format(train_mse))
+            print('  [View 1] ACC: {:.4f} | mIoU: {:.4f}'.format(acc1, res1['mean_iou']))
+            print('  [View 2] ACC: {:.4f} | mIoU: {:.4f}'.format(acc2, res2['mean_iou']))
+            print('========================================\n')
             
 
             torch.save({'epoch': epoch+1, 
@@ -314,12 +314,12 @@ def main(args, logger):
         # Evaluate with fresh clusters.
         acc_list_new = []  
         res_list_new = []                 
-        logger.info('Start computing centroids.')
+        print('Start computing centroids.')
         if args.repeats > 0:
             for _ in range(args.repeats):
                 t1 = t.time()
                 centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=-1)
-                logger.info('-Centroids ready. [Loss: {:.5f}/ Time: {}]\n'.format(kmloss1, get_datetime(int(t.time())-int(t1))))
+                print('-Centroids ready. [Loss: {:.5f}/ Time: {}]\n'.format(kmloss1, get_datetime(int(t.time())-int(t1))))
                 
                 classifier1 = initialize_classifier(args)
                 classifier1.module.weight.data = centroids1.unsqueeze(-1).unsqueeze(-1)
@@ -333,10 +333,10 @@ def main(args, logger):
             acc_list_new.append(acc_new)
             res_list_new.append(res_new)
 
-        logger.info('Average overall pixel accuracy [NEW] : {:.3f} +/- {:.3f}.'.format(np.mean(acc_list_new), np.std(acc_list_new)))
-        logger.info('Average mIoU [NEW] : {:.3f} +/- {:.3f}. '.format(np.mean([res['mean_iou'] for res in res_list_new]), 
+        print('Average overall pixel accuracy [NEW] : {:.3f} +/- {:.3f}.'.format(np.mean(acc_list_new), np.std(acc_list_new)))
+        print('Average mIoU [NEW] : {:.3f} +/- {:.3f}. '.format(np.mean([res['mean_iou'] for res in res_list_new]), 
                                                                     np.std([res['mean_iou'] for res in res_list_new])))
-        logger.info('Experiment done. [{}]\n'.format(get_datetime(int(t.time())-int(t_start))))
+        print('Experiment done. [{}]\n'.format(get_datetime(int(t.time())-int(t_start))))
         
         
 if __name__=='__main__':

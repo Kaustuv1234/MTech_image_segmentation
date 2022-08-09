@@ -27,15 +27,32 @@ class GaussianBlur(object):
 
 class EvalCOCO(data.Dataset):
     def __init__(self, root, split, mode, res=128, transform_list=[], label=True, stuff=True, thing=False):
+        # directory of dataset
         self.root  = root 
-        self.split = split
-        self.mode  = mode
+
+        # takes-{train, val}
+        # train - specifies train2017 folder in images or annotations folder.
+        # val - specifies val2017 folder in images or annotations folder.
+        self.split = split 
+
+        # takes-{compute, test}.
+        # compute - it has no consequence, its not implemented(ignore)
+        # test - images are transformed
+        self.mode  = mode 
+
+        # image resolution - INT
         self.res   = res 
+
+        # list of image names(in split folder) without extension
         self.imdb  = self.load_imdb()
+
+        # flags that tells whether to consider stuff or thing categories in image label
         self.stuff = stuff 
         self.thing = thing 
+
+        # when we call __getitem__ this flag indicates whether to send label and images or images only. 
         self.label = label
-        self.view  = -1
+
 
         # this is a vectorize object that takes an input array and returns fine_to_coarse_dict[x] for each element
         self.fine_to_coarse = self._get_fine_to_coarse() 
@@ -70,8 +87,14 @@ class EvalCOCO(data.Dataset):
 
         return image, label
 
-    def transform_data(self, image, label, index, raw_image=False):
 
+    def transform_data(self, image, label, raw_image=False):
+        '''
+        Resize, crop and apply color transformations(jitter, greying, blurring) on image and its corresponding label.
+        If raw_image is True then return only the image after resize and crop.
+        Finally change the fine labels into coarse labels.
+        Return both image and label
+        '''
         # 1. Resize
         image = TF.resize(image, self.res, Image.BILINEAR)
         label = TF.resize(label, self.res, Image.NEAREST)
@@ -87,7 +110,7 @@ class EvalCOCO(data.Dataset):
         if raw_image:
             return image
 
-        # 3. Transformation
+        # 3. Color Transformations
         image = self._image_transform(image, self.mode)
         if not self.label:
             return (image, None)

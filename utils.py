@@ -304,23 +304,19 @@ def collate_train_baseline(batch):
 
 def get_dataset(args, mode, inv_list=[], eqv_list=[]):
     if args.cityscapes:
+        # CITY SCAPES DATASET
         if mode == 'train':
-            dataset = TrainCityscapes(args.data_root, labeldir=args.save_model_path, res1=args.res1, res2=args.res2, 
-                                      split='train', mode='compute', inv_list=inv_list, eqv_list=eqv_list, scale=(args.min_scale, 1))
+            dataset = TrainCityscapes(args.data_root, labeldir=args.save_model_path, res1=args.res1, res2=args.res2, split='train', mode='compute', inv_list=inv_list, eqv_list=eqv_list, scale=(args.min_scale, 1))
         elif mode == 'train_val':
-            dataset = EvalCityscapes(args.data_root, res=args.res, split='val', mode='test',
-                                     label_mode=args.label_mode, long_image=args.long_image)
+            dataset = EvalCityscapes(args.data_root, res=args.res, split='val', mode='test', label_mode=args.label_mode, long_image=args.long_image)
         elif mode == 'eval_val':
-            dataset = EvalCityscapes(args.data_root, res=args.res, split=args.val_type, 
-                                     mode='test', label_mode=args.label_mode, long_image=args.long_image, label=False)
+            dataset = EvalCityscapes(args.data_root, res=args.res, split=args.val_type, mode='test', label_mode=args.label_mode, long_image=args.long_image, label=False)
         elif mode == 'eval_test':
-            dataset = EvalCityscapes(args.data_root, res=args.res, split='val', mode='test',
-                                     label_mode=args.label_mode, long_image=args.long_image)
+            dataset = EvalCityscapes(args.data_root, res=args.res, split='val', mode='test', label_mode=args.label_mode, long_image=args.long_image)
     else:
+        # COCO DATASET
         if mode == 'train':
-            dataset = TrainCOCO(args.data_root, labeldir=args.save_model_path, split='train', mode='compute', res1=args.res1,
-                                res2=args.res2, inv_list=inv_list, eqv_list=eqv_list, thing=args.thing, stuff=args.stuff,
-                                scale=(args.min_scale, 1))
+            dataset = TrainCOCO(args.data_root, labeldir=args.save_model_path, split='train', mode='compute', res1=args.res1, res2=args.res2, inv_list=inv_list, eqv_list=eqv_list, thing=args.thing, stuff=args.stuff, scale=(args.min_scale, 1))
         elif mode == 'train_val':
             dataset = EvalCOCO(args.data_root, res=args.res, split='val', mode='test', stuff=args.stuff, thing=args.thing)
         elif mode == 'eval_val':
