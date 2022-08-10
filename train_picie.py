@@ -80,7 +80,7 @@ def parse_arguments():
 
 
 
-
+# called by main()
 def train(args, logger, dataloader, model, classifier1, classifier2, criterion1, criterion2, optimizer, epoch):
     losses = AverageMeter()
     losses_mse = AverageMeter()
@@ -180,10 +180,16 @@ def main(args, logger):
     t_start = t.time()
 
     # Get model and optimizer.
+    # model is a pantopicFPN
+    # optimizer is SGD or ADAM
+    # classifier1 is a Conv2d layer that outputs k channels(k as in k-means) (its used for evaluation only)
     model, optimizer, classifier1 = get_model_and_optimizer(args, logger)
 
     # New trainset inside for-loop.
+
+    # get invariance and equivariance transforms
     inv_list, eqv_list = get_transform_params(args)
+
     trainset = get_dataset(args, mode='train', inv_list=inv_list, eqv_list=eqv_list)
     trainloader = torch.utils.data.DataLoader(trainset, 
                                                 batch_size=args.batch_size_cluster,

@@ -98,9 +98,7 @@ def _fast_hist(label_true, label_pred, n_class):
 
 def scores(label_trues, label_preds, n_class):
     hist = np.zeros((n_class, n_class))
-    print('11111111111111111111')
     print('label_trues.shape', label_trues.shape, '\nlabel_preds.shape', label_preds.shape)
-    print('11111111111111111111')
     for lt, lp in zip(label_trues, label_preds):
         hist += _fast_hist(lt.flatten(), lp.flatten(), n_class)
     return hist
@@ -150,14 +148,15 @@ def freeze_all(model):
     for param in model.module.parameters():
         param.requires_grad = False 
 
-
+# returns a Conv2d layer that outputs K channels(K as in K-means), then parallelizes it and moves it to GPU
 def initialize_classifier(args):
     classifier = get_linear(args.in_dim, args.K_train)
-    classifier = nn.DataParallel(classifier)
-    classifier = classifier.cuda()
+    classifier = nn.DataParallel(classifier) # splits data automatically and sends job orders to multiple models on several GPUs
+    classifier = classifier.cuda() # send model to GPU
 
     return classifier
 
+# returns a Conv2d layer that outputs K channels(K as in K-means)
 def get_linear(indim, outdim):
     classifier = nn.Conv2d(indim, outdim, kernel_size=1, stride=1, padding=0, bias=True)
     classifier.weight.data.normal_(0, 0.01)
@@ -251,8 +250,8 @@ def eqv_transform_if_needed(args, dataloader, indice, input):
 
 
 def get_transform_params(args):
-    inv_list = []
-    eqv_list = []
+    inv_list = [] # invariance transforms(photometric transforms)
+    eqv_list = [] # equivariance transforms(geometric transforms)
     if args.augment:
         if args.blur:
             inv_list.append('blur')

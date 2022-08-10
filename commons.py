@@ -13,11 +13,12 @@ warnings.filterwarnings('ignore')
 
 def get_model_and_optimizer(args, logger):
     # Init model 
-    model = fpn.PanopticFPN(args)
-    model = nn.DataParallel(model)
-    model = model.cuda()
+    model = fpn.PanopticFPN(args) # pantopic feature pyramid network
+    model = nn.DataParallel(model) # splits data automatically and sends job orders to multiple models on several GPUs
+    model = model.cuda() # send model to GPU
 
     # Init classifier (for eval only.)
+    # Conv2d layer that outputs K channels(K as in K-means). It has been parallelized and present on GPU.
     classifier = initialize_classifier(args)
 
     # Init optimizer 
@@ -71,26 +72,26 @@ def run_mini_batch_kmeans(args, logger, dataloader, model, view):
             # 1. Compute initial centroids from the first few batches. 
             if view == 1:
                 image = eqv_transform_if_needed(args, dataloader, indice, image.cuda(non_blocking=True))
-                feats = model(image)
+                features = model(image)
             elif view == 2:
                 image = image.cuda(non_blocking=True)
-                feats = eqv_transform_if_needed(args, dataloader, indice, model(image))
+                features = eqv_transform_if_needed(args, dataloader, indice, model(image))
             else:
                 # For evaluation. 
                 image = image.cuda(non_blocking=True)
-                feats = model(image)
+                features = model(image)
 
             # Normalize.
             if args.metric_test == 'cosine':
-                feats = F.normalize(feats, dim=1, p=2)
+                features = F.normalize(features, dim=1, p=2)
             
             if i_batch == 0:
                 logger.info('Batch input size : {}'.format(list(image.shape)))
-                logger.info('Batch feature : {}'.format(list(feats.shape)))
+                logger.info('Batch feature : {}'.format(list(features.shape)))
             
-            feats = feature_flatten(feats).detach().cpu()
+            features = feature_flatten(features).detach().cpu()
             if num_batches < args.num_init_batches:
-                featslist.append(feats)
+                featslist.append(features)
                 num_batches += 1
                 
                 if num_batches == args.num_init_batches or num_batches == len(dataloader):
@@ -155,23 +156,23 @@ def compute_labels(args, logger, dataloader, model, centroids, view):
         for i, (indice, image) in enumerate(dataloader):
             if view == 1:
                 image = eqv_transform_if_needed(args, dataloader, indice, image.cuda(non_blocking=True))
-                feats = model(image)
+                features = model(image)
             elif view == 2:
                 image = image.cuda(non_blocking=True)
-                feats = eqv_transform_if_needed(args, dataloader, indice, model(image))
+                features = eqv_transform_if_needed(args, dataloader, indice, model(image))
 
             # Normalize.
             if args.metric_train == 'cosine':
-                feats = F.normalize(feats, dim=1, p=2)
+                features = F.normalize(features, dim=1, p=2)
 
-            B, C, H, W = feats.shape
+            B, C, H, W = features.shape
             if i == 0:
                 logger.info('Centroid size      : {}'.format(list(centroids.shape)))
                 logger.info('Batch input size   : {}'.format(list(image.shape)))
-                logger.info('Batch feature size : {}\n'.format(list(feats.shape)))
+                logger.info('Batch feature size : {}\n'.format(list(features.shape)))
 
             # Compute distance and assign label. 
-            scores  = compute_negative_euclidean(feats, centroids, metric_function) 
+            scores  = compute_negative_euclidean(features, centroids, metric_function) 
 
             # Save labels and count. 
             for idx, idx_img in enumerate(indice):
@@ -186,33 +187,42 @@ def compute_labels(args, logger, dataloader, model, centroids, view):
 
 def evaluate(args, logger, dataloader, classifier, model):
     logger.info('====== METRIC TEST : {} ======\n'.format(args.metric_test))
-    histogram = np.zeros((args.K_test, args.K_test))
+    histogram = np.zeros((args.K_test, args.K_test)) # 27 x 27 by default
 
+    # set to evaluation mode
     model.eval()
     classifier.eval()
-    with torch.no_grad():
+
+    with torch.no_grad(): # disables gradient calculation, useful for inference, reduces memory consumption for computations 
+        
         for i, (_, image, label) in enumerate(dataloader):
-            image = image.cuda(non_blocking=True)
-            feats = model(image)
+            image = image.cuda(non_blocking=True) # move image to GPU in background
+            features = model(image) # get feature vector [batch, channel, height, width] 
+
 
             if args.metric_test == 'cosine':
-                feats = F.normalize(feats, dim=1, p=2)
+                features = F.normalize(features, dim=1, p=2) # convert into unit vector
             
-            B, C, H, W = feats.size()
+            B, C, H, W = features.size()
             if i == 0:
                 logger.info('Batch input size   : {}'.format(list(image.shape)))
                 logger.info('Batch label size   : {}'.format(list(label.shape)))
-                logger.info('Batch feature size : {}\n'.format(list(feats.shape)))
+                logger.info('Batch feature size : {}\n'.format(list(features.shape)))
 
-            probs = classifier(feats)
-            probs = F.interpolate(probs, label.shape[-2:], mode='bilinear', align_corners=False)
+            # get probabilities
+            probs = classifier(features) 
+
+            # upsample the probabilities to match label shape
+            probs = F.interpolate(probs, label.shape[-2:], mode='bilinear', align_corners=False) 
+
+            # get indices of top k values
             preds = probs.topk(1, dim=1)[1].view(B, -1).cpu().numpy()
+
+            # 
             label = label.view(B, -1).cpu().numpy()
-            print('22222222222222222')
             print('probs', probs.shape)
             print('preds', preds.shape)
             print('label', label.shape)
-            print('22222222222222222')
 
             histogram += scores(label, preds, args.K_test)
             
