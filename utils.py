@@ -89,18 +89,64 @@ def get_datetime(time_delta):
 ################################################################################
 
 def _fast_hist(label_true, label_pred, n_class):
-    mask = (label_true >= 0) & (label_true < n_class) # Exclude unlabelled data.
-    hist = np.bincount(n_class * label_true[mask] + label_pred[mask],\
-                       minlength=n_class ** 2).reshape(n_class, n_class)
+    # label_true: [23 23 23 ... 21 21 21] (102400,),  its a flattened 320x320 image
+    # label_pred: [10 10 10 ... 25 25 25] (102400,),  its a flattened 320x320 image
+    # mask: [ True  True  True ...  True  True  True] (102400,)
+    # n_class: 27
+    # Exclude unlabelled data.
+    mask = (label_true >= 0) & (label_true < n_class) 
+
+
+    # in array of +ve integers, bincount() counts the occurrence of each element. Each bin value is the occurrence of its index
+    # all elements in both labels are within 0 to 26
+    # all elements in hist are within 0 to 27*27-1
+    # the rows of hist represent true labels and cols represent preds. each element in 27x27 matrix represents a particular combination of true and pred
+    hist = np.bincount(n_class * label_true[mask] + label_pred[mask], minlength=n_class ** 2).reshape(n_class, n_class) # (27, 27)
+    '''
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0] 
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0    70     0 0     0     0     0     0     0     0   149     0     0     0     0 0    11     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0    94     0   810     0   584     0     0     0     0  7077     0 0     0     0    46     0     0  2064 18307     0   689     0     0 0  3463     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0    81     0     0     0     0     0     0   796     0 0     0     0     1     0     0     0   679     2    58     0     0 0  1834     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0  1089     0    78     0     0     0     0   348     0 0     0     0    15     0     0   375  2197     0     0     0     0 0   933     0]
+ [    0    46     0   550    17    88     0  2929     0     0  9471     0 6     0     0  1146     0     0     1  3701   263  2924     9     0 0  3406     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0  4674     0  1875     0     0     0     0   843    79 1248  0     0    55     0     0   117  1241    40     0     0     0 0 22165     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0    29     0 0     0     0     0     0     0     0    22     0     0     0     0 0     0     0]
+ [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]] 
+    '''
+   
     
     return hist
 
 
 def scores(label_trues, label_preds, n_class):
+
     hist = np.zeros((n_class, n_class))
     print('label_trues.shape', label_trues.shape, '\nlabel_preds.shape', label_preds.shape)
+
     for lt, lp in zip(label_trues, label_preds):
         hist += _fast_hist(lt.flatten(), lp.flatten(), n_class)
+    
+    # there are 27 possible labels.
+    # each index hist[r][c] represents true label 'r' and prediction 'c' 
+    # the element at a hist[r][c] represent how many times in label_preds the prediction was 'c' while the actual label was 'r'
     return hist
 
 
