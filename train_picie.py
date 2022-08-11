@@ -224,8 +224,8 @@ def main(args, logger):
             print('\n============================= [Epoch {}] =============================\n'.format(epoch))
             print('Start computing centroids.')
             t1 = t.time()
-            centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=1)
-            centroids2, kmloss2 = run_mini_batch_kmeans(args, logger, trainloader, model, view=2)
+            centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=1) # first apply geometric transforms, then get features
+            centroids2, kmloss2 = run_mini_batch_kmeans(args, logger, trainloader, model, view=2) # first get features, then apply geometric transforms
             print('-Centroids ready. [Loss: {:.5f}| {:.5f}/ Time: {}]\n'.format(kmloss1, kmloss2, get_datetime(int(t.time())-int(t1))))
             
             # Compute cluster assignment. 
@@ -324,7 +324,7 @@ def main(args, logger):
         if args.repeats > 0:
             for _ in range(args.repeats):
                 t1 = t.time()
-                centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=-1)
+                centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=-1) # view -1 means dont apply any geometric transforms, just get features
                 print('-Centroids ready. [Loss: {:.5f}/ Time: {}]\n'.format(kmloss1, get_datetime(int(t.time())-int(t1))))
                 
                 classifier1 = initialize_classifier(args)

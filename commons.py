@@ -71,13 +71,20 @@ def run_mini_batch_kmeans(args, logger, dataloader, model, view):
         for i_batch, (indice, image) in enumerate(dataloader):
             # 1. Compute initial centroids from the first few batches. 
             if view == 1:
+                # for training
+                # first apply equivariance transforms (depending on args.equiv flag apply geometric transforms)
+                # then get features
                 image = eqv_transform_if_needed(args, dataloader, indice, image.cuda(non_blocking=True))
                 features = model(image)
             elif view == 2:
+                # for training
+                # first get features
+                # then apply equiv transforms
                 image = image.cuda(non_blocking=True)
                 features = eqv_transform_if_needed(args, dataloader, indice, model(image))
             else:
                 # For evaluation. 
+                # just get features
                 image = image.cuda(non_blocking=True)
                 features = model(image)
 
@@ -194,10 +201,12 @@ def evaluate(args, logger, dataloader, classifier, model):
     classifier.eval()
 
     with torch.no_grad(): # disables gradient calculation, useful for inference, reduces memory consumption for computations 
-        
+
         for i, (_, image, label) in enumerate(dataloader):
-            image = image.cuda(non_blocking=True) # move image to GPU in background
-            features = model(image) # get feature vector [batch, channel, height, width] 
+            # image shape: [50, 3, 320, 320]
+            # label shape: [50, 320, 320]
+            image = image.cuda(non_blocking=True) # move image to GPU in background 
+            features = model(image) # get feature vector [batch, channel, height, width] # [50, 128, 80, 80]
 
 
             if args.metric_test == 'cosine':
@@ -210,26 +219,28 @@ def evaluate(args, logger, dataloader, classifier, model):
                 logger.info('Batch feature size : {}\n'.format(list(features.shape)))
 
             # get probabilities
-            probs = classifier(features) 
+            probs = classifier(features) # [50, 27, 80, 80]
 
-            # upsample the probabilities to match label shape
-            probs = F.interpolate(probs, label.shape[-2:], mode='bilinear', align_corners=False) 
+            # upsample the probabilities to match true label shape
+            probs = F.interpolate(probs, label.shape[-2:], mode='bilinear', align_corners=False) # [50, 27, 320, 320]
 
             # get indices of top k values
-            preds = probs.topk(1, dim=1)[1].view(B, -1).cpu().numpy()
+            preds = probs.topk(1, dim=1)[1].view(B, -1).cpu().numpy() # (50, 102400)
 
-            # 
-            label = label.view(B, -1).cpu().numpy()
+            label = label.view(B, -1).cpu().numpy() # (50, 102400)
             print('probs', probs.shape)
             print('preds', preds.shape)
             print('label', label.shape)
 
-            histogram += scores(label, preds, args.K_test)
+            histogram += scores(label, preds, args.K_test) # (27, 27)
+            # there are 27 possible labels.
+            # the element at a hist[r][c] represent how many times in label_preds the prediction was 'c' while the actual label was 'r'
             
             if i%20==0:
                 logger.info('{}/{}'.format(i, len(dataloader)))
     
-    # Hungarian Matching. 
+    # Hungarian Matching(for solving linear sum assignment problem)
+    # linear sum assignment problem
     m = linear_assignment(histogram.max() - histogram)
 
     # Evaluate. 

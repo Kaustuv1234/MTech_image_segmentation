@@ -5,7 +5,7 @@ import torchvision
 from torchvision import transforms
 import torchvision.transforms.functional as TF
 import numpy as np 
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageOps
 import json
 import random 
 import cv2
@@ -83,7 +83,7 @@ class EvalCOCO(data.Dataset):
         label_path = os.path.join(self.root, 'annotations', '{}2017'.format(self.split), '{}.tif'.format(image_id))
 
         image = Image.open(image_path).convert('RGB')
-        label = Image.open(label_path)
+        label = ImageOps.grayscale(Image.open(label_path))
 
         return image, label
 
@@ -131,15 +131,16 @@ class EvalCOCO(data.Dataset):
 
         refer to following link for creating "fine_to_coarse_dict.pickle"- https://github.com/xu-ji/IIC/tree/master/code/datasets/segmentation/util
         """
-        with open(os.path.join(self.root, FINE_TO_COARSE_PATH), "rb") as dict_f:
-            d = pickle.load(dict_f)
-        fine_to_coarse_dict      = d["fine_index_to_coarse_index"]  # get index mapping
-        fine_to_coarse_dict[255] = -1 # does -1 mean no classification ??
+        # with open(os.path.join(self.root, FINE_TO_COARSE_PATH), "rb") as dict_f:
+        #     d = pickle.load(dict_f)
+        # fine_to_coarse_dict      = d["fine_index_to_coarse_index"]  # get index mapping
+        # fine_to_coarse_dict[255] = -1 # does -1 mean no classification ??
 
         # below is a numpy vectorize object, it takes multiple inputs and applies the function to all the elements
-        fine_to_coarse_map       = np.vectorize(lambda x: fine_to_coarse_dict[x]) # function that takes x and returns fine_to_coarse_dict[x]
-
-        return fine_to_coarse_map
+        # fine_to_coarse_map = np.vectorize(lambda x: fine_to_coarse_dict[x]) # function that takes x and returns fine_to_coarse_dict[x]
+        mapping_dict = {29:0, 150:1, 179:2, 226:3, 255:4, 76:5}
+        picie_mapping = np.vectorize(lambda x: mapping_dict[x])
+        return picie_mapping
 
 
     def _label_transform(self, label):
