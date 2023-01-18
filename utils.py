@@ -11,8 +11,6 @@ import faiss
 
 from data.coco_train_dataset import TrainCOCO
 from data.coco_eval_dataset import EvalCOCO 
-from data.cityscapes_train_dataset import TrainCityscapes
-from data.cityscapes_eval_dataset import EvalCityscapes
 
 ################################################################################
 #                                  General-purpose                             #
