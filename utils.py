@@ -151,7 +151,8 @@ def freeze_all(model):
 
 def initialize_classifier(args):
     classifier = get_linear(args.in_dim, args.K_train)
-    classifier = nn.DataParallel(classifier, device_ids = [2, 3, 1, 0])
+    # classifier = nn.DataParallel(classifier, device_ids = [2, 3, 1, 0])
+    classifier = nn.DataParallel(classifier, )
     classifier = classifier.cuda( )
 
     return classifier
@@ -182,7 +183,7 @@ def get_faiss_module(args):
     res = faiss.StandardGpuResources()
     cfg = faiss.GpuIndexFlatConfig()
     cfg.useFloat16 = False 
-    cfg.device     = 2 #NOTE: Single GPU only. (changed to GPU #2)
+    cfg.device     = 0 #NOTE: Single GPU only. (changed to GPU #2)
     idx = faiss.GpuIndexFlatL2(res, args.in_dim, cfg)
 
     return idx
