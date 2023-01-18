@@ -27,41 +27,23 @@ class GaussianBlur(object):
 
 class EvalCOCO(data.Dataset):
     def __init__(self, root, split, mode, res=128, transform_list=[], label=True, stuff=True, thing=False):
-        # directory of dataset
         self.root  = root 
-
-        # takes-{train, val}
-        # train - specifies train2017 folder in images or annotations folder.
-        # val - specifies val2017 folder in images or annotations folder.
-        self.split = split 
-
-        # takes-{compute, test}.
-        # compute - it has no consequence, its not implemented(ignore)
-        # test - images are transformed
-        self.mode  = mode 
-
-        # image resolution - INT
+        self.split = split # train2017 or val2017 folder in curated, images, annotations
+        self.mode  = mode
         self.res   = res 
-
-        # list of image names(in split folder) without extension
         self.imdb  = self.load_imdb()
-
-        # flags that tells whether to consider stuff or thing categories in image label
         self.stuff = stuff 
         self.thing = thing 
-
-        # when we call __getitem__ this flag indicates whether to send label and images or images only. 
         self.label = label
+        self.view  = -1
 
-
-        # this is a vectorize object that takes an input array and returns fine_to_coarse_dict[x] for each element
-        self.fine_to_coarse = self._get_fine_to_coarse() 
+        self.fine_to_coarse = self._get_fine_to_coarse()
 
         # For test-time augmentation / robustness test. 
         self.transform_list = transform_list
         
     def load_imdb(self):
-        # returns list of image names without extension
+        # 1. Setup filelist
         imdb = os.path.join(self.root, 'curated', '{}2017'.format(self.split), 'Coco164kFull_Stuff_Coarse_7.txt')
         imdb = tuple(open(imdb, "r"))
         imdb = [id_.rstrip() for id_ in imdb]
@@ -79,22 +61,16 @@ class EvalCOCO(data.Dataset):
         Labels are in unit8 format where class labels are in [0 - 181] and 255 is unlabeled.
         """
         N = len(self.imdb)
-        image_path = os.path.join(self.root, 'images', '{}2017'.format(self.split), '{}.tif'.format(image_id))
-        label_path = os.path.join(self.root, 'annotations', '{}2017'.format(self.split), '{}.tif'.format(image_id))
+        image_path = os.path.join(self.root, 'images', '{}2017'.format(self.split), '{}.png'.format(image_id))
+        label_path = os.path.join(self.root, 'annotations', '{}2017'.format(self.split), '{}.png'.format(image_id))
 
         image = Image.open(image_path).convert('RGB')
         label = ImageOps.grayscale(Image.open(label_path))
 
         return image, label
 
+    def transform_data(self, image, label, index, raw_image=False):
 
-    def transform_data(self, image, label, raw_image=False):
-        '''
-        Resize, crop and apply color transformations(jitter, greying, blurring) on image and its corresponding label.
-        If raw_image is True then return only the image after resize and crop.
-        Finally change the fine labels into coarse labels.
-        Return both image and label
-        '''
         # 1. Resize
         image = TF.resize(image, self.res, Image.BILINEAR)
         label = TF.resize(label, self.res, Image.NEAREST)
@@ -110,12 +86,11 @@ class EvalCOCO(data.Dataset):
         if raw_image:
             return image
 
-        # 3. Color Transformations
+        # 3. Transformation
         image = self._image_transform(image, self.mode)
         if not self.label:
             return (image, None)
 
-        # change all fine classifications to coarse classifications
         label = self._label_transform(label)
 
         return image, label
@@ -124,31 +99,22 @@ class EvalCOCO(data.Dataset):
     def _get_fine_to_coarse(self):
         """
         Map fine label indexing to coarse label indexing. 
-        Coarse means broad classes like vehicles, animals, traffic signs, etc
-        Fine means classes that belong to coarse like cat, dog, car, bus, plane, etc
-
-        the dictionary has 2 keys - fine_name_to_coarse_name and fine_index_to_coarse_index
-
-        refer to following link for creating "fine_to_coarse_dict.pickle"- https://github.com/xu-ji/IIC/tree/master/code/datasets/segmentation/util
         """
-        # with open(os.path.join(self.root, FINE_TO_COARSE_PATH), "rb") as dict_f:
-        #     d = pickle.load(dict_f)
-        # fine_to_coarse_dict      = d["fine_index_to_coarse_index"]  # get index mapping
-        # fine_to_coarse_dict[255] = -1 # does -1 mean no classification ??
+#         with open(os.path.join(self.root, FINE_TO_COARSE_PATH), "rb") as dict_f:
+#             d = pickle.load(dict_f)
+#         fine_to_coarse_dict      = d["fine_index_to_coarse_index"]
+#         fine_to_coarse_dict[255] = -1
+#         fine_to_coarse_map       = np.vectorize(lambda x: fine_to_coarse_dict[x]) # not in-place.
 
-        # below is a numpy vectorize object, it takes multiple inputs and applies the function to all the elements
-        # fine_to_coarse_map = np.vectorize(lambda x: fine_to_coarse_dict[x]) # function that takes x and returns fine_to_coarse_dict[x]
-        mapping_dict = {29:0, 150:1, 179:2, 226:3, 255:4, 76:5}
+#         return fine_to_coarse_map
+    
+        mapping_dict = {29:0, 76:5, 150:1, 179:2, 225:3, 226:3, 255:4}
         picie_mapping = np.vectorize(lambda x: mapping_dict[x])
         return picie_mapping
 
 
     def _label_transform(self, label):
         """
-        takes a multidimensional array, then maps each class index to its superclass index. 
-        If stuff is true, then make all superclass index for things negative
-        If things is true, then make all superclass index for stuff negative
-
         In COCO-Stuff, there are 91 Things and 91 Stuff. 
             91 Things (0-90)  => 12 superclasses (0-11)
             91 Stuff (91-181) => 15 superclasses (12-26)
@@ -156,7 +122,7 @@ class EvalCOCO(data.Dataset):
         For [Stuff-15], which is the benchmark IIC uses, we only use 15 stuff superclasses.
         """
         label = np.array(label)
-        label = self.fine_to_coarse(label)    # Map fine class index to superclass index
+        label = self.fine_to_coarse(label)    # Map to superclass indexing.
         mask  = label >= 255 # Exclude unlabelled.
         
         # Start from zero. 
@@ -166,7 +132,7 @@ class EvalCOCO(data.Dataset):
             mask = label > 11 # This makes all Stuff categories negative (ignored.)
             label[mask] = -1
             
-        # convert to tensor of long type
+        # Tensor-fy
         label = torch.LongTensor(label)                            
 
         return label
@@ -175,13 +141,13 @@ class EvalCOCO(data.Dataset):
     def _image_transform(self, image, mode):
         if self.mode == 'test':
             transform = self._get_data_transformation()
+
             return transform(image)
         else:
             raise NotImplementedError()
 
 
     def _get_data_transformation(self):
-        
         trans_list = []
         if 'jitter' in self.transform_list:
             trans_list.append(transforms.RandomApply([transforms.ColorJitter(0.3, 0.3, 0.3, 0.1)], p=0.8))

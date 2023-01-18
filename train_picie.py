@@ -45,8 +45,8 @@ def parse_arguments():
     # Loss. 
     parser.add_argument('--metric_train', type=str, default='cosine')   
     parser.add_argument('--metric_test', type=str, default='cosine')
-    parser.add_argument('--K_train', type=int, default=27) # COCO Stuff-15 / COCO Thing-12 / COCO All-27
-    parser.add_argument('--K_test', type=int, default=27) 
+    parser.add_argument('--K_train', type=int, default=6) # COCO Stuff-15 / COCO Thing-12 / COCO All-27
+    parser.add_argument('--K_test', type=int, default=6) 
     parser.add_argument('--no_balance', action='store_true', default=False)
     parser.add_argument('--mse', action='store_true', default=False)
 
@@ -80,7 +80,7 @@ def parse_arguments():
 
 
 
-# called by main()
+
 def train(args, logger, dataloader, model, classifier1, classifier2, criterion1, criterion2, optimizer, epoch):
     losses = AverageMeter()
     losses_mse = AverageMeter()
@@ -91,24 +91,24 @@ def train(args, logger, dataloader, model, classifier1, classifier2, criterion1,
     # switch to train mode
     model.train()
     if args.mse:
-        criterion_mse = torch.nn.MSELoss().cuda()
+        criterion_mse = torch.nn.MSELoss().cuda(2, )
 
     classifier1.eval()
     classifier2.eval()
     for i, (indice, input1, input2, label1, label2) in enumerate(dataloader):
-        input1 = eqv_transform_if_needed(args, dataloader, indice, input1.cuda(non_blocking=True))
-        label1 = label1.cuda(non_blocking=True)
+        input1 = eqv_transform_if_needed(args, dataloader, indice, input1.cuda(2, non_blocking=True))
+        label1 = label1.cuda(2, non_blocking=True)
         featmap1 = model(input1)
         
-        input2 = input2.cuda(non_blocking=True)
-        label2 = label2.cuda(non_blocking=True)
+        input2 = input2.cuda(2, non_blocking=True)
+        label2 = label2.cuda(2, non_blocking=True)
         featmap2 = eqv_transform_if_needed(args, dataloader, indice, model(input2))
 
         B, C, _ = featmap1.size()[:3]
         if i == 0:
-            print('Batch input size   : {}'.format(list(input1.shape)))
-            print('Batch label size   : {}'.format(list(label1.shape)))
-            print('Batch feature size : {}\n'.format(list(featmap1.shape)))
+            logger.info('Batch input size   : {}'.format(list(input1.shape)))
+            logger.info('Batch label size   : {}'.format(list(label1.shape)))
+            logger.info('Batch feature size : {}\n'.format(list(featmap1.shape)))
         
         if args.metric_train == 'cosine':
             featmap1 = F.normalize(featmap1, dim=1, p=2)
@@ -158,7 +158,7 @@ def train(args, logger, dataloader, model, classifier1, classifier2, criterion1,
         optimizer.step()
 
         if (i % 200) == 0:
-            print('{0} / {1}\t'.format(i, len(dataloader)))
+            logger.info('{0} / {1}\t'.format(i, len(dataloader)))
 
     return losses.avg, losses_cet.avg, losses_cet_within.avg, losses_cet_across.avg, losses_mse.avg
 
@@ -171,7 +171,7 @@ def adjust_learning_rate(optimizer, epoch, args):
 
 
 def main(args, logger):
-    print(args)
+    logger.info(args)
 
     # Use random seed.
     fix_seed_for_reproducability(args.seed)
@@ -180,16 +180,10 @@ def main(args, logger):
     t_start = t.time()
 
     # Get model and optimizer.
-    # model is a pantopicFPN
-    # optimizer is SGD or ADAM
-    # classifier1 is a Conv2d layer that outputs k channels(k as in k-means) (its used for evaluation only)
     model, optimizer, classifier1 = get_model_and_optimizer(args, logger)
 
     # New trainset inside for-loop.
-
-    # get invariance and equivariance transforms
     inv_list, eqv_list = get_transform_params(args)
-
     trainset = get_dataset(args, mode='train', inv_list=inv_list, eqv_list=eqv_list)
     trainloader = torch.utils.data.DataLoader(trainset, 
                                                 batch_size=args.batch_size_cluster,
@@ -221,26 +215,26 @@ def main(args, logger):
             # Adjust lr if needed. 
             # adjust_learning_rate(optimizer, epoch, args)
 
-            print('\n============================= [Epoch {}] =============================\n'.format(epoch))
-            print('Start computing centroids.')
+            logger.info('\n============================= [Epoch {}] =============================\n'.format(epoch))
+            logger.info('Start computing centroids.')
             t1 = t.time()
-            centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=1) # first apply geometric transforms, then get features
-            centroids2, kmloss2 = run_mini_batch_kmeans(args, logger, trainloader, model, view=2) # first get features, then apply geometric transforms
-            print('-Centroids ready. [Loss: {:.5f}| {:.5f}/ Time: {}]\n'.format(kmloss1, kmloss2, get_datetime(int(t.time())-int(t1))))
+            centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=1)
+            centroids2, kmloss2 = run_mini_batch_kmeans(args, logger, trainloader, model, view=2)
+            logger.info('-Centroids ready. [Loss: {:.5f}| {:.5f}/ Time: {}]\n'.format(kmloss1, kmloss2, get_datetime(int(t.time())-int(t1))))
             
             # Compute cluster assignment. 
             t2 = t.time()
             weight1 = compute_labels(args, logger, trainloader, model, centroids1, view=1)
             weight2 = compute_labels(args, logger, trainloader, model, centroids2, view=2)
-            print('-Cluster labels ready. [{}]\n'.format(get_datetime(int(t.time())-int(t2)))) 
+            logger.info('-Cluster labels ready. [{}]\n'.format(get_datetime(int(t.time())-int(t2)))) 
             
             # Criterion.
             if not args.no_balance:
-                criterion1 = torch.nn.CrossEntropyLoss(weight=weight1).cuda()
-                criterion2 = torch.nn.CrossEntropyLoss(weight=weight2).cuda()
+                criterion1 = torch.nn.CrossEntropyLoss(weight=weight1).cuda(2, )
+                criterion2 = torch.nn.CrossEntropyLoss(weight=weight2).cuda(2, )
             else:
-                criterion1 = torch.nn.CrossEntropyLoss().cuda()
-                criterion2 = torch.nn.CrossEntropyLoss().cuda()
+                criterion1 = torch.nn.CrossEntropyLoss().cuda(2, )
+                criterion2 = torch.nn.CrossEntropyLoss().cuda(2, )
 
             # Setup nonparametric classifier.
             classifier1 = initialize_classifier(args)
@@ -264,20 +258,20 @@ def main(args, logger):
                                                             collate_fn=collate_train,
                                                             worker_init_fn=worker_init_fn(args.seed))
 
-            print('Start training ...')
+            logger.info('Start training ...')
             train_loss, train_cet, cet_within, cet_across, train_mse = train(args, logger, trainloader_loop, model, classifier1, classifier2, criterion1, criterion2, optimizer, epoch) 
             acc1, res1 = evaluate(args, logger, testloader, classifier1, model)
             acc2, res2 = evaluate(args, logger, testloader, classifier2, model)
             
-            print('============== Epoch [{}] =============='.format(epoch))
-            print('  Time: [{}]'.format(get_datetime(int(t.time())-int(t1))))
-            print('  K-Means loss   : {:.5f} | {:.5f}'.format(kmloss1, kmloss2))
-            print('  Training Total Loss  : {:.5f}'.format(train_loss))
-            print('  Training CE Loss (Total | Within | Across) : {:.5f} | {:.5f} | {:.5f}'.format(train_cet, cet_within, cet_across))
-            print('  Training MSE Loss (Total) : {:.5f}'.format(train_mse))
-            print('  [View 1] ACC: {:.4f} | mIoU: {:.4f}'.format(acc1, res1['mean_iou']))
-            print('  [View 2] ACC: {:.4f} | mIoU: {:.4f}'.format(acc2, res2['mean_iou']))
-            print('========================================\n')
+            logger.info('============== Epoch [{}] =============='.format(epoch))
+            logger.info('  Time: [{}]'.format(get_datetime(int(t.time())-int(t1))))
+            logger.info('  K-Means loss   : {:.5f} | {:.5f}'.format(kmloss1, kmloss2))
+            logger.info('  Training Total Loss  : {:.5f}'.format(train_loss))
+            logger.info('  Training CE Loss (Total | Within | Across) : {:.5f} | {:.5f} | {:.5f}'.format(train_cet, cet_within, cet_across))
+            logger.info('  Training MSE Loss (Total) : {:.5f}'.format(train_mse))
+            logger.info('  [View 1] ACC: {:.4f} | mIoU: {:.4f}'.format(acc1, res1['mean_iou']))
+            logger.info('  [View 2] ACC: {:.4f} | mIoU: {:.4f}'.format(acc2, res2['mean_iou']))
+            logger.info('========================================\n')
             
 
             torch.save({'epoch': epoch+1, 
@@ -299,7 +293,7 @@ def main(args, logger):
                         os.path.join(args.save_model_path, 'checkpoint.pth.tar'))
         
         # Evaluate.
-        trainset    = get_dataset(args, mode='eval_val')
+        trainset    = get_dataset(args, mode='train')
         trainloader = torch.utils.data.DataLoader(trainset, 
                                                     batch_size=args.batch_size_cluster,
                                                     shuffle=True,
@@ -307,6 +301,7 @@ def main(args, logger):
                                                     pin_memory=True,
                                                     collate_fn=collate_train,
                                                     worker_init_fn=worker_init_fn(args.seed))
+
 
         testset    = get_dataset(args, mode='eval_test')
         testloader = torch.utils.data.DataLoader(testset, 
@@ -317,15 +312,18 @@ def main(args, logger):
                                                 collate_fn=collate_eval,
                                                 worker_init_fn=worker_init_fn(args.seed))
 
+
+        ''' IGNORE IGNORE IGNORE IGNORE IGNORE IGNORE'''
         # Evaluate with fresh clusters.
         acc_list_new = []  
         res_list_new = []                 
-        print('Start computing centroids.')
+        logger.info('Start computing centroids.')
         if args.repeats > 0:
             for _ in range(args.repeats):
                 t1 = t.time()
-                centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=-1) # view -1 means dont apply any geometric transforms, just get features
-                print('-Centroids ready. [Loss: {:.5f}/ Time: {}]\n'.format(kmloss1, get_datetime(int(t.time())-int(t1))))
+                
+                centroids1, kmloss1 = run_mini_batch_kmeans(args, logger, trainloader, model, view=-1)
+                logger.info('-Centroids ready. [Loss: {:.5f}/ Time: {}]\n'.format(kmloss1, get_datetime(int(t.time())-int(t1))))
                 
                 classifier1 = initialize_classifier(args)
                 classifier1.module.weight.data = centroids1.unsqueeze(-1).unsqueeze(-1)
@@ -339,10 +337,10 @@ def main(args, logger):
             acc_list_new.append(acc_new)
             res_list_new.append(res_new)
 
-        print('Average overall pixel accuracy [NEW] : {:.3f} +/- {:.3f}.'.format(np.mean(acc_list_new), np.std(acc_list_new)))
-        print('Average mIoU [NEW] : {:.3f} +/- {:.3f}. '.format(np.mean([res['mean_iou'] for res in res_list_new]), 
+        logger.info('Average overall pixel accuracy [NEW] : {:.3f} +/- {:.3f}.'.format(np.mean(acc_list_new), np.std(acc_list_new)))
+        logger.info('Average mIoU [NEW] : {:.3f} +/- {:.3f}. '.format(np.mean([res['mean_iou'] for res in res_list_new]), 
                                                                     np.std([res['mean_iou'] for res in res_list_new])))
-        print('Experiment done. [{}]\n'.format(get_datetime(int(t.time())-int(t_start))))
+        logger.info('Experiment done. [{}]\n'.format(get_datetime(int(t.time())-int(t_start))))
         
         
 if __name__=='__main__':
@@ -354,7 +352,7 @@ if __name__=='__main__':
     if args.augment:
         args.save_root += '/augmented/res1={}_res2={}/jitter={}_blur={}_grey={}'.format(args.res1, args.res2, args.jitter, args.blur, args.grey)
     if args.equiv:
-        args.save_root += '/equiv/h_flip={}_v_flip={}_crop={}/min_scale\={}'.format(args.h_flip, args.v_flip, args.random_crop, args.min_scale)
+        args.save_root += '/equiv/h_flip={}_v_flip={}_crop={}/min_scale={}'.format(args.h_flip, args.v_flip, args.random_crop, args.min_scale)
     if args.no_balance:
         args.save_root += '/no_balance'
     if args.mse:

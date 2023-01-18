@@ -62,7 +62,7 @@ class TrainCOCO(data.Dataset):
         """
         Labels are in unit8 format where class labels are in [0 - 181] and 255 is unlabeled.
         """
-        image_path = os.path.join(self.root, 'images', '{}2017'.format(self.split), '{}.jpg'.format(image_id))
+        image_path = os.path.join(self.root, 'images', '{}2017'.format(self.split), '{}.png'.format(image_id))
 
         return Image.open(image_path).convert('RGB')
 

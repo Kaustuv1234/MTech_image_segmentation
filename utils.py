@@ -88,65 +88,20 @@ def get_datetime(time_delta):
 #                                Metric-related ops                            #
 ################################################################################
 
+''' returns confusion matrix for an image '''
 def _fast_hist(label_true, label_pred, n_class):
-    # label_true: [23 23 23 ... 21 21 21] (102400,),  its a flattened 320x320 image
-    # label_pred: [10 10 10 ... 25 25 25] (102400,),  its a flattened 320x320 image
-    # mask: [ True  True  True ...  True  True  True] (102400,)
-    # n_class: 27
-    # Exclude unlabelled data.
-    mask = (label_true >= 0) & (label_true < n_class) 
-
-
-    # in array of +ve integers, bincount() counts the occurrence of each element. Each bin value is the occurrence of its index
-    # all elements in both labels are within 0 to 26
-    # all elements in hist are within 0 to 27*27-1
-    # the rows of hist represent true labels and cols represent preds. each element in 27x27 matrix represents a particular combination of true and pred
-    hist = np.bincount(n_class * label_true[mask] + label_pred[mask], minlength=n_class ** 2).reshape(n_class, n_class) # (27, 27)
-    '''
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0] 
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0    70     0 0     0     0     0     0     0     0   149     0     0     0     0 0    11     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0    94     0   810     0   584     0     0     0     0  7077     0 0     0     0    46     0     0  2064 18307     0   689     0     0 0  3463     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0    81     0     0     0     0     0     0   796     0 0     0     0     1     0     0     0   679     2    58     0     0 0  1834     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0  1089     0    78     0     0     0     0   348     0 0     0     0    15     0     0   375  2197     0     0     0     0 0   933     0]
- [    0    46     0   550    17    88     0  2929     0     0  9471     0 6     0     0  1146     0     0     1  3701   263  2924     9     0 0  3406     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0  4674     0  1875     0     0     0     0   843    79 1248  0     0    55     0     0   117  1241    40     0     0     0 0 22165     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0    29     0 0     0     0     0     0     0     0    22     0     0     0     0 0     0     0]
- [    0     0     0     0     0     0     0     0     0     0     0     0 0     0     0     0     0     0     0     0     0     0     0     0 0     0     0]] 
-    '''
-   
-    
+    mask = (label_true >= 0) & (label_true < n_class) # Exclude unlabelled data.
+    # bincount counts the occurrence of each element. Each bin value is the occurrence of its index.
+    # create a matrix where rows represent ground truth and columns represent predictions
+    # the matrix contains the counts of all cells
+    hist = np.bincount(n_class * label_true[mask] + label_pred[mask], minlength=n_class ** 2).reshape(n_class, n_class)
     return hist
 
-
+''' returns confusion matrix for a batch '''
 def scores(label_trues, label_preds, n_class):
-
     hist = np.zeros((n_class, n_class))
-    print('label_trues.shape', label_trues.shape, '\nlabel_preds.shape', label_preds.shape)
-
-    for lt, lp in zip(label_trues, label_preds):
-        hist += _fast_hist(lt.flatten(), lp.flatten(), n_class)
-    
-    # there are 27 possible labels.
-    # each index hist[r][c] represents true label 'r' and prediction 'c' 
-    # the element at a hist[r][c] represent how many times in label_preds the prediction was 'c' while the actual label was 'r'
+    for true_label, pred_label in zip(label_trues, label_preds):
+        hist += _fast_hist(true_label.flatten(), pred_label.flatten(), n_class)
     return hist
 
 
@@ -181,8 +136,8 @@ def get_metric_as_conv(centroids):
     centroids_weight = centroids.unsqueeze(-1).unsqueeze(-1)
     metric_function  = nn.Conv2d(C, N, 1, padding=0, stride=1, bias=False)
     metric_function.weight.data = centroids_weight
-    metric_function = nn.DataParallel(metric_function)
-    metric_function = metric_function.cuda()
+    metric_function = nn.DataParallel(metric_function, device_ids = [2, 3, 1, 0])
+    metric_function = metric_function.cuda(2, )
     
     return metric_function
 
@@ -194,15 +149,14 @@ def freeze_all(model):
     for param in model.module.parameters():
         param.requires_grad = False 
 
-# returns a Conv2d layer that outputs K channels(K as in K-means), then parallelizes it and moves it to GPU
+
 def initialize_classifier(args):
     classifier = get_linear(args.in_dim, args.K_train)
-    classifier = nn.DataParallel(classifier) # splits data automatically and sends job orders to multiple models on several GPUs
-    classifier = classifier.cuda() # send model to GPU
+    classifier = nn.DataParallel(classifier, device_ids = [2, 3, 1, 0])
+    classifier = classifier.cuda(2, )
 
     return classifier
 
-# returns a Conv2d layer that outputs K channels(K as in K-means)
 def get_linear(indim, outdim):
     classifier = nn.Conv2d(indim, outdim, kernel_size=1, stride=1, padding=0, bias=True)
     classifier.weight.data.normal_(0, 0.01)
@@ -229,7 +183,7 @@ def get_faiss_module(args):
     res = faiss.StandardGpuResources()
     cfg = faiss.GpuIndexFlatConfig()
     cfg.useFloat16 = False 
-    cfg.device     = 0 #NOTE: Single GPU only. 
+    cfg.device     = 2 #NOTE: Single GPU only. (changed to GPU #2)
     idx = faiss.GpuIndexFlatL2(res, args.in_dim, cfg)
 
     return idx
@@ -296,8 +250,8 @@ def eqv_transform_if_needed(args, dataloader, indice, input):
 
 
 def get_transform_params(args):
-    inv_list = [] # invariance transforms(photometric transforms)
-    eqv_list = [] # equivariance transforms(geometric transforms)
+    inv_list = []
+    eqv_list = []
     if args.augment:
         if args.blur:
             inv_list.append('blur')
@@ -348,25 +302,16 @@ def collate_train_baseline(batch):
     return indice, image
 
 def get_dataset(args, mode, inv_list=[], eqv_list=[]):
-    if args.cityscapes:
-        # CITY SCAPES DATASET
-        if mode == 'train':
-            dataset = TrainCityscapes(args.data_root, labeldir=args.save_model_path, res1=args.res1, res2=args.res2, split='train', mode='compute', inv_list=inv_list, eqv_list=eqv_list, scale=(args.min_scale, 1))
-        elif mode == 'train_val':
-            dataset = EvalCityscapes(args.data_root, res=args.res, split='val', mode='test', label_mode=args.label_mode, long_image=args.long_image)
-        elif mode == 'eval_val':
-            dataset = EvalCityscapes(args.data_root, res=args.res, split=args.val_type, mode='test', label_mode=args.label_mode, long_image=args.long_image, label=False)
-        elif mode == 'eval_test':
-            dataset = EvalCityscapes(args.data_root, res=args.res, split='val', mode='test', label_mode=args.label_mode, long_image=args.long_image)
-    else:
-        # COCO DATASET
-        if mode == 'train':
-            dataset = TrainCOCO(args.data_root, labeldir=args.save_model_path, split='train', mode='compute', res1=args.res1, res2=args.res2, inv_list=inv_list, eqv_list=eqv_list, thing=args.thing, stuff=args.stuff, scale=(args.min_scale, 1))
-        elif mode == 'train_val':
-            dataset = EvalCOCO(args.data_root, res=args.res, split='val', mode='test', stuff=args.stuff, thing=args.thing)
-        elif mode == 'eval_val':
-            dataset = EvalCOCO(args.data_root, res=args.res, split=args.val_type, mode='test', label=False)
-        elif mode == 'eval_test':
-            dataset = EvalCOCO(args.data_root, res=args.res, split='val', mode='test', stuff=args.stuff, thing=args.thing)
+
+    if mode == 'train':
+        dataset = TrainCOCO(args.data_root, labeldir=args.save_model_path, split='train', mode='compute', res1=args.res1,
+                            res2=args.res2, inv_list=inv_list, eqv_list=eqv_list, thing=args.thing, stuff=args.stuff,
+                            scale=(args.min_scale, 1))
+    elif mode == 'train_val':
+        dataset = EvalCOCO(args.data_root, res=args.res, split='val', mode='test', stuff=args.stuff, thing=args.thing)
+    elif mode == 'eval_val':
+        dataset = EvalCOCO(args.data_root, res=args.res, split=args.val_type, mode='test', label=False)
+    elif mode == 'eval_test':
+        dataset = EvalCOCO(args.data_root, res=args.res, split='val', mode='test', stuff=args.stuff, thing=args.thing)
     
     return dataset 

@@ -3,8 +3,7 @@ import numpy as np
 import torch 
 import torch.nn as nn 
 
-# from sklearn.utils.linear_assignment_ import linear_assignment
-from scipy.optimize import linear_sum_assignment as linear_assignment
+from sklearn.utils.linear_assignment_ import linear_assignment
 from modules import fpn 
 from utils import *
 
@@ -13,12 +12,11 @@ warnings.filterwarnings('ignore')
 
 def get_model_and_optimizer(args, logger):
     # Init model 
-    model = fpn.PanopticFPN(args) # pantopic feature pyramid network
-    model = nn.DataParallel(model) # splits data automatically and sends job orders to multiple models on several GPUs
-    model = model.cuda() # send model to GPU
+    model = fpn.PanopticFPN(args)
+    model = nn.DataParallel(model, [2, 3, 1, 0])
+    model = model.cuda(2, )
 
     # Init classifier (for eval only.)
-    # Conv2d layer that outputs K channels(K as in K-means). It has been parallelized and present on GPU.
     classifier = initialize_classifier(args)
 
     # Init optimizer 
@@ -62,43 +60,35 @@ def run_mini_batch_kmeans(args, logger, dataloader, model, view):
     featslist    = []
     num_batches  = 0
     first_batch  = True
-    
     # Choose which view it is now. 
     dataloader.dataset.view = view
-
     model.train()
+
     with torch.no_grad():
         for i_batch, (indice, image) in enumerate(dataloader):
             # 1. Compute initial centroids from the first few batches. 
             if view == 1:
-                # for training
-                # first apply equivariance transforms (depending on args.equiv flag apply geometric transforms)
-                # then get features
-                image = eqv_transform_if_needed(args, dataloader, indice, image.cuda(non_blocking=True))
-                features = model(image)
+                image = eqv_transform_if_needed(args, dataloader, indice, image.cuda(2, non_blocking=True))
+                feats = model(image)
             elif view == 2:
-                # for training
-                # first get features
-                # then apply equiv transforms
-                image = image.cuda(non_blocking=True)
-                features = eqv_transform_if_needed(args, dataloader, indice, model(image))
+                image = image.cuda(2, non_blocking=True)
+                feats = eqv_transform_if_needed(args, dataloader, indice, model(image))
             else:
                 # For evaluation. 
-                # just get features
-                image = image.cuda(non_blocking=True)
-                features = model(image)
+                image = image.cuda(2, non_blocking=True)
+                feats = model(image)
 
             # Normalize.
             if args.metric_test == 'cosine':
-                features = F.normalize(features, dim=1, p=2)
+                feats = F.normalize(feats, dim=1, p=2)
             
             if i_batch == 0:
                 logger.info('Batch input size : {}'.format(list(image.shape)))
-                logger.info('Batch feature : {}'.format(list(features.shape)))
+                logger.info('Batch feature : {}'.format(list(feats.shape)))
             
-            features = feature_flatten(features).detach().cpu()
+            feats = feature_flatten(feats).detach().cpu()
             if num_batches < args.num_init_batches:
-                featslist.append(features)
+                featslist.append(feats)
                 num_batches += 1
                 
                 if num_batches == args.num_init_batches or num_batches == len(dataloader):
@@ -137,7 +127,7 @@ def run_mini_batch_kmeans(args, logger, dataloader, model, view):
             if (i_batch % 100) == 0:
                 logger.info('[Saving features]: {} / {} | [K-Means Loss]: {:.4f}'.format(i_batch, len(dataloader), kmeans_loss.avg))
 
-    centroids = torch.tensor(centroids, requires_grad=False).cuda()
+    centroids = torch.tensor(centroids, requires_grad=False).cuda(2, )
 
     return centroids, kmeans_loss.avg
 
@@ -162,24 +152,24 @@ def compute_labels(args, logger, dataloader, model, centroids, view):
     with torch.no_grad():
         for i, (indice, image) in enumerate(dataloader):
             if view == 1:
-                image = eqv_transform_if_needed(args, dataloader, indice, image.cuda(non_blocking=True))
-                features = model(image)
+                image = eqv_transform_if_needed(args, dataloader, indice, image.cuda(2, non_blocking=True))
+                feats = model(image)
             elif view == 2:
-                image = image.cuda(non_blocking=True)
-                features = eqv_transform_if_needed(args, dataloader, indice, model(image))
+                image = image.cuda(2, non_blocking=True)
+                feats = eqv_transform_if_needed(args, dataloader, indice, model(image))
 
             # Normalize.
             if args.metric_train == 'cosine':
-                features = F.normalize(features, dim=1, p=2)
+                feats = F.normalize(feats, dim=1, p=2)
 
-            B, C, H, W = features.shape
+            B, C, H, W = feats.shape
             if i == 0:
                 logger.info('Centroid size      : {}'.format(list(centroids.shape)))
                 logger.info('Batch input size   : {}'.format(list(image.shape)))
-                logger.info('Batch feature size : {}\n'.format(list(features.shape)))
+                logger.info('Batch feature size : {}\n'.format(list(feats.shape)))
 
             # Compute distance and assign label. 
-            scores  = compute_negative_euclidean(features, centroids, metric_function) 
+            scores  = compute_negative_euclidean(feats, centroids, metric_function) 
 
             # Save labels and count. 
             for idx, idx_img in enumerate(indice):
@@ -194,75 +184,47 @@ def compute_labels(args, logger, dataloader, model, centroids, view):
 
 def evaluate(args, logger, dataloader, classifier, model):
     logger.info('====== METRIC TEST : {} ======\n'.format(args.metric_test))
-    histogram = np.zeros((args.K_test, args.K_test)) # 27 x 27 by default
+    histogram = np.zeros((args.K_test, args.K_test))
 
-    # set to evaluation mode
     model.eval()
     classifier.eval()
-
-    with torch.no_grad(): # disables gradient calculation, useful for inference, reduces memory consumption for computations 
-
+    with torch.no_grad():
         for i, (_, image, label) in enumerate(dataloader):
-            # image shape: [50, 3, 320, 320]
-            # label shape: [50, 320, 320]
-            image = image.cuda(non_blocking=True) # move image to GPU in background 
-            features = model(image) # get feature vector [batch, channel, height, width] # [50, 128, 80, 80]
-
+            image = image.cuda(2, non_blocking=True)
+            feats = model(image) # image features
 
             if args.metric_test == 'cosine':
-                features = F.normalize(features, dim=1, p=2) # convert into unit vector
+                feats = F.normalize(feats, dim=1, p=2)
             
-            B, C, H, W = features.size()
+            B, C, H, W = feats.size()
             if i == 0:
                 logger.info('Batch input size   : {}'.format(list(image.shape)))
                 logger.info('Batch label size   : {}'.format(list(label.shape)))
-                logger.info('Batch feature size : {}\n'.format(list(features.shape)))
+                logger.info('Batch feature size : {}\n'.format(list(feats.shape)))
 
-            # get probabilities
-            probs = classifier(features) # [50, 27, 80, 80]
-
-            # upsample the probabilities to match true label shape
-            probs = F.interpolate(probs, label.shape[-2:], mode='bilinear', align_corners=False) # [50, 27, 320, 320]
-
-            # get indices of top k values
-            preds = probs.topk(1, dim=1)[1].view(B, -1).cpu().numpy() # (50, 102400)
-
-            label = label.view(B, -1).cpu().numpy() # (50, 102400)
-            print('probs', probs.shape)
-            print('preds', preds.shape)
-            print('label', label.shape)
-
-            histogram += scores(label, preds, args.K_test) # (27, 27)
-            # there are 27 possible labels.
-            # the element at a hist[r][c] represent how many times in label_preds the prediction was 'c' while the actual label was 'r'
+            probs = classifier(feats) # classification probabilites
+            probs = F.interpolate(probs, label.shape[-2:], mode='bilinear', align_corners=False)
+            preds = probs.topk(1, dim=1)[1].view(B, -1).cpu().numpy()
+            label = label.view(B, -1).cpu().numpy()
+            # confusion matrix
+            histogram += scores(label, preds, args.K_test) 
             
-            if i%20==0:
-                logger.info('{}/{}'.format(i, len(dataloader)))
     
-    # Hungarian Matching(for solving linear sum assignment problem)
-    # linear sum assignment problem
+    # Hungarian Matching algorithm to solve the linear assignment problem
     m = linear_assignment(histogram.max() - histogram)
 
     # Evaluate. 
     acc = histogram[m[:, 0], m[:, 1]].sum() / histogram.sum() * 100
 
     new_hist = np.zeros((args.K_test, args.K_test))
-    for idx in range(args.K_test):
-        new_hist[m[idx, 1]] = histogram[idx]
+    print('new_hist size', new_hist.shape)
+    for index in range(args.K_test):
+        new_hist[m[index, 1]] = histogram[index]
     
-    # NOTE: Now [new_hist] is re-ordered to 12 thing + 15 stuff classses. 
     res1 = get_result_metrics(new_hist)
     logger.info('ACC  - All: {:.4f}'.format(res1['overall_precision (pixel accuracy)']))
     logger.info('mIOU - All: {:.4f}'.format(res1['mean_iou']))
 
-    # For Table 2 - partitioned evaluation.
-    if args.thing and args.stuff:
-        res2 = get_result_metrics(new_hist[:12, :12])
-        logger.info('ACC  - Thing: {:.4f}'.format(res2['overall_precision (pixel accuracy)']))
-        logger.info('mIOU - Thing: {:.4f}'.format(res2['mean_iou']))
 
-        res3 = get_result_metrics(new_hist[12:, 12:])
-        logger.info('ACC  - Stuff: {:.4f}'.format(res3['overall_precision (pixel accuracy)']))
-        logger.info('mIOU - Stuff: {:.4f}'.format(res3['mean_iou']))
     
     return acc, res1
