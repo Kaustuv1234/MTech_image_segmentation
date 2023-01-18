@@ -135,7 +135,7 @@ def get_metric_as_conv(centroids):
     metric_function  = nn.Conv2d(C, N, 1, padding=0, stride=1, bias=False)
     metric_function.weight.data = centroids_weight
     metric_function = nn.DataParallel(metric_function, device_ids = [2, 3, 1, 0])
-    metric_function = metric_function.cuda(2, )
+    metric_function = metric_function.cuda( )
     
     return metric_function
 
@@ -151,7 +151,7 @@ def freeze_all(model):
 def initialize_classifier(args):
     classifier = get_linear(args.in_dim, args.K_train)
     classifier = nn.DataParallel(classifier, device_ids = [2, 3, 1, 0])
-    classifier = classifier.cuda(2, )
+    classifier = classifier.cuda( )
 
     return classifier
 

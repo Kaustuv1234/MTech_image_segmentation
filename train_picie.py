@@ -91,17 +91,17 @@ def train(args, logger, dataloader, model, classifier1, classifier2, criterion1,
     # switch to train mode
     model.train()
     if args.mse:
-        criterion_mse = torch.nn.MSELoss().cuda(2, )
+        criterion_mse = torch.nn.MSELoss().cuda( )
 
     classifier1.eval()
     classifier2.eval()
     for i, (indice, input1, input2, label1, label2) in enumerate(dataloader):
-        input1 = eqv_transform_if_needed(args, dataloader, indice, input1.cuda(2, non_blocking=True))
-        label1 = label1.cuda(2, non_blocking=True)
+        input1 = eqv_transform_if_needed(args, dataloader, indice, input1.cuda( non_blocking=True))
+        label1 = label1.cuda( non_blocking=True)
         featmap1 = model(input1)
         
-        input2 = input2.cuda(2, non_blocking=True)
-        label2 = label2.cuda(2, non_blocking=True)
+        input2 = input2.cuda( non_blocking=True)
+        label2 = label2.cuda( non_blocking=True)
         featmap2 = eqv_transform_if_needed(args, dataloader, indice, model(input2))
 
         B, C, _ = featmap1.size()[:3]
@@ -230,11 +230,11 @@ def main(args, logger):
             
             # Criterion.
             if not args.no_balance:
-                criterion1 = torch.nn.CrossEntropyLoss(weight=weight1).cuda(2, )
-                criterion2 = torch.nn.CrossEntropyLoss(weight=weight2).cuda(2, )
+                criterion1 = torch.nn.CrossEntropyLoss(weight=weight1).cuda( )
+                criterion2 = torch.nn.CrossEntropyLoss(weight=weight2).cuda( )
             else:
-                criterion1 = torch.nn.CrossEntropyLoss().cuda(2, )
-                criterion2 = torch.nn.CrossEntropyLoss().cuda(2, )
+                criterion1 = torch.nn.CrossEntropyLoss().cuda( )
+                criterion2 = torch.nn.CrossEntropyLoss().cuda( )
 
             # Setup nonparametric classifier.
             classifier1 = initialize_classifier(args)

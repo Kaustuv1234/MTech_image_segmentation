@@ -13,8 +13,9 @@ warnings.filterwarnings('ignore')
 def get_model_and_optimizer(args, logger):
     # Init model 
     model = fpn.PanopticFPN(args)
-    model = nn.DataParallel(model, [2, 3, 1, 0])
-    model = model.cuda(2, )
+    # model = nn.DataParallel(model, [2, 3, 1, 0])
+    model = nn.DataParallel(model, )
+    model = model.cuda( )
 
     # Init classifier (for eval only.)
     classifier = initialize_classifier(args)
@@ -68,14 +69,14 @@ def run_mini_batch_kmeans(args, logger, dataloader, model, view):
         for i_batch, (indice, image) in enumerate(dataloader):
             # 1. Compute initial centroids from the first few batches. 
             if view == 1:
-                image = eqv_transform_if_needed(args, dataloader, indice, image.cuda(2, non_blocking=True))
+                image = eqv_transform_if_needed(args, dataloader, indice, image.cuda( non_blocking=True))
                 feats = model(image)
             elif view == 2:
-                image = image.cuda(2, non_blocking=True)
+                image = image.cuda( non_blocking=True)
                 feats = eqv_transform_if_needed(args, dataloader, indice, model(image))
             else:
                 # For evaluation. 
-                image = image.cuda(2, non_blocking=True)
+                image = image.cuda( non_blocking=True)
                 feats = model(image)
 
             # Normalize.
@@ -127,7 +128,7 @@ def run_mini_batch_kmeans(args, logger, dataloader, model, view):
             if (i_batch % 100) == 0:
                 logger.info('[Saving features]: {} / {} | [K-Means Loss]: {:.4f}'.format(i_batch, len(dataloader), kmeans_loss.avg))
 
-    centroids = torch.tensor(centroids, requires_grad=False).cuda(2, )
+    centroids = torch.tensor(centroids, requires_grad=False).cuda( )
 
     return centroids, kmeans_loss.avg
 
@@ -152,10 +153,10 @@ def compute_labels(args, logger, dataloader, model, centroids, view):
     with torch.no_grad():
         for i, (indice, image) in enumerate(dataloader):
             if view == 1:
-                image = eqv_transform_if_needed(args, dataloader, indice, image.cuda(2, non_blocking=True))
+                image = eqv_transform_if_needed(args, dataloader, indice, image.cuda( non_blocking=True))
                 feats = model(image)
             elif view == 2:
-                image = image.cuda(2, non_blocking=True)
+                image = image.cuda( non_blocking=True)
                 feats = eqv_transform_if_needed(args, dataloader, indice, model(image))
 
             # Normalize.
@@ -190,7 +191,7 @@ def evaluate(args, logger, dataloader, classifier, model):
     classifier.eval()
     with torch.no_grad():
         for i, (_, image, label) in enumerate(dataloader):
-            image = image.cuda(2, non_blocking=True)
+            image = image.cuda( non_blocking=True)
             feats = model(image) # image features
 
             if args.metric_test == 'cosine':
