@@ -134,7 +134,8 @@ def get_metric_as_conv(centroids):
     centroids_weight = centroids.unsqueeze(-1).unsqueeze(-1)
     metric_function  = nn.Conv2d(C, N, 1, padding=0, stride=1, bias=False)
     metric_function.weight.data = centroids_weight
-    metric_function = nn.DataParallel(metric_function, device_ids = [2, 3, 1, 0])
+    # metric_function = nn.DataParallel(metric_function, device_ids = [2, 3, 1, 0])
+    metric_function = nn.DataParallel(metric_function, )
     metric_function = metric_function.cuda( )
     
     return metric_function
