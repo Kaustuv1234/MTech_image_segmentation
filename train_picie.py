@@ -18,7 +18,7 @@ def parse_arguments():
     parser.add_argument('--restart_path', type=str)
     parser.add_argument('--comment', type=str, default='')
     parser.add_argument('--seed', type=int, default=2021, help='Random seed for reproducability.')
-    parser.add_argument('--num_workers', type=int, default=4, help='Number of workers.')
+    parser.add_argument('--num_workers', type=int, default=1, help='Number of workers.')
     parser.add_argument('--restart', action='store_true', default=False)
     parser.add_argument('--num_epoch', type=int, default=10) 
     parser.add_argument('--repeats', type=int, default=0)  
